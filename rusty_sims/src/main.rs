@@ -1,8 +1,12 @@
+use std::collections::HashMap;
 use std::io::stdin;
+use std::process;
+use ulid;
 
 use bcrypt::{self, hash, verify};
 
-// // Store Inventory Management System
+// Store Inventory Management System
+#[derive(Debug)]
 struct Product {
     name: String,
     description: String,
@@ -10,7 +14,7 @@ struct Product {
     quantity: i64,
 }
 
-struct user_info {
+struct UserInfo {
     name: String,
     password: String,
 }
@@ -69,39 +73,19 @@ fn print_titles(title: &str, sub_title: &str, sep_width: usize) {
     }
 }
 
-fn authenticate_user(name: &String, password: &String, user: &user_info) {
-    // let hash_password = match hash(&password, 12) {
-    //     Ok(value) => value,
-    //     Err(_) => "hashing error".to_string(),
-    // };
-    //
-    if "$2b$12$6yGyx16jFRCVd6e4w2drWerJFdjIh098Hn5IRsbZre9AgFNoepCOa"
-        == "$2b$12$6yGyx16jFRCVd6e4w2drWerJFdjIh098Hn5IRsbZre9AgFNoepCOa"
-    {
-        println!("they match man!");
-    }
-
+fn authenticate_user(name: &String, password: &String, user: &UserInfo) {
     if *name == user.name {
-        println!(
-            "{},{},{}\n",
-            name,
-            user.password.as_str(),
-            password.as_str()
-        );
-        let is_authenticated = match verify(password, &user.password.as_str()) {
-            Ok(status) => {
-                println!("comparison done!");
-                println!("{}", status);
-                status
+        match verify(password, &user.password) {
+            Ok(true) => println!("Authenticated!"),
+            Ok(false) => {
+                println!("{},{}", password, user.password);
+                println!("Wrong credentials. Aborting ...");
+                process::abort();
             }
-            Err(_) => false,
-        };
-
-        if !is_authenticated {
-            println!("Sorry, wrong credentials. Aborting ...");
+            Err(_) => println!("Credentials validation error. Sorry!"),
         }
-        ()
     }
+    println!("Wrong username. Aborting ...");
 }
 
 fn strip_right(text: &mut String) {
@@ -112,7 +96,76 @@ fn strip_right(text: &mut String) {
     ()
 }
 
+type Id = ulid::Ulid;
+type Inventory = HashMap<Id, Product>;
+
+fn add_product(inventory: &mut Inventory) {
+    let mut new_prod = Product {
+        name: "".to_string(),
+        description: "".to_string(),
+        price: 0.0,
+        quantity: 0,
+    };
+
+    println!("Enter product name: ");
+    stdin()
+        .read_line(&mut new_prod.name)
+        .expect("Error reading product's name!");
+
+    println!("Provide a description: ");
+    stdin()
+        .read_line(&mut new_prod.description)
+        .expect("Error reading product's description");
+
+    println!("What should be the price: ");
+    let mut price_string: String = "".to_string();
+    stdin()
+        .read_line(&mut price_string)
+        .expect("Error reading product's price");
+    strip_right(&mut price_string);
+
+    new_prod.price = match price_string.parse::<f64>() {
+        Ok(value) => value,
+        Err(_) => {
+            println!("Error parsing product's price, sorry.");
+            new_prod.price
+        }
+    };
+
+    println!("How many of these are in stock: ");
+    let mut quantity_string = "".to_string();
+    stdin()
+        .read_line(&mut quantity_string)
+        .expect("Error reading product's quantity");
+    strip_right(&mut quantity_string);
+
+    new_prod.quantity = match quantity_string.parse::<i64>() {
+        Ok(value) => value,
+        Err(_) => {
+            println!("Error parsing product's quantity string");
+            new_prod.quantity
+        }
+    };
+
+    println!("{:?}", new_prod);
+
+    // add the product to the inventory with a unique ID now
+    let id: Id = ulid::Ulid::new();
+
+    inventory.insert(id, new_prod);
+}
+
+fn print_inventory(inventory: &mut Inventory) {
+    for (key, _value) in inventory.into_iter() {
+        println!("{}", key);
+    }
+}
+
 fn main() {
+    // 0. Define inventory now
+    // inventory should be a map
+    let mut inventory: Inventory = HashMap::new();
+
     // let inventory: Vec<Product> = Vec::new();
     // 1. Define and create a basic interface
     let title = "Welcome to RustySIMS";
@@ -124,7 +177,7 @@ fn main() {
     let uname = String::from("Hamza");
     let upass = String::from("$2b$12$6yGyx16jFRCVd6e4w2drWerJFdjIh098Hn5IRsbZre9AgFNoepCOa");
 
-    let registered_user = user_info {
+    let _registered_user = UserInfo {
         name: uname,
         password: upass,
     };
@@ -143,5 +196,11 @@ fn main() {
     strip_right(&mut password);
 
     println!("{},{}", name, password);
-    authenticate_user(&name, &password, &registered_user);
+
+    // authenticate_user(&name, &password, &registered_user);
+    // will authenticate the user later
+
+    // 3. Inventory management
+    add_product(&mut inventory);
+    print_inventory(&mut inventory);
 }
