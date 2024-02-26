@@ -8,14 +8,14 @@ pub struct Manager {
     hashed_password: String,
 }
 
-pub fn authenticate_user(conn: &Connection, name: &str, password: &str) {
+pub fn authenticate_manager(conn: &Connection, name: &str, password: &str) {
     // get the manager from the database
     let mut statement = conn
-        .prepare("SELECT 1 FROM managers WHER name = ?1")
+        .prepare("SELECT id, name, hashed_password FROM managers WHERE name = ?1")
         .expect("Error preparing the query statement");
 
     let mut manager_iter = statement
-        .query_map([], |row| {
+        .query_map(params![name], |row| {
             Ok(Manager {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -26,7 +26,7 @@ pub fn authenticate_user(conn: &Connection, name: &str, password: &str) {
 
     // used this while loop since the pattern in question is refutable
     while let Some(result) = manager_iter.next() {
-        let manager = result.expect("Failed to fetch manager");
+        let manager = result.expect("Failed to fetch manager data from table");
 
         let mut temp_pass = password.to_string();
         strip_right(&mut temp_pass);
@@ -46,7 +46,6 @@ pub fn authenticate_user(conn: &Connection, name: &str, password: &str) {
 }
 
 pub fn create_manager(conn: &Connection, name: &str, password: &str) -> Result<()> {
-    // should be my headache
     let temp_pass = password.to_string();
     misc::strip_right(&mut temp_pass.to_string());
 
@@ -76,4 +75,3 @@ pub fn create_manager(conn: &Connection, name: &str, password: &str) -> Result<(
 
     Ok(())
 }
-
