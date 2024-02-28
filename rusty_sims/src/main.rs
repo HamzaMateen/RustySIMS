@@ -3,55 +3,14 @@ mod database;
 mod inventory;
 mod misc;
 
-use crate::{
-    database::{create_tables, get_manager_id},
-    misc::strip_right,
-};
 use rusqlite::Connection;
 use std::io::{self, stdin, Write};
 
-// use crate::auth;
-//
-//
-// use std::collections::HashMap;
-// use std::io::stdin;
-// use std::process;
-// use ulid;
-//
-// // Store Inventory Management System
-// #[derive(Debug)]
-// struct Product {
-//     name: String,
-//     description: String,
-//     price: f64,
-//     quantity: i64,
-// }
-//
-
-//
-// type Id = ulid::Ulid;
-// type Inventory = HashMap<Id, Product>;
-//
-//     // add the product to the inventory with a unique ID now
-//     let id: Id = ulid::Ulid::new();
-//
-//     inventory.insert(id, new_prod);
-// }
-//
-// fn print_inventory(inventory: &mut Inventory) {
-//     for (key, _value) in inventory.iter_mut() {
-//         println!("{}", key);
-//     }
-// }
-//
-//
-
-// enum LoginChoice {
-//     Register = 1,
-//     Login = 2,
-//     Invalid,
-// }
-//
+use crate::{
+    database::create_tables,
+    inventory::{add_product, remove_product},
+    misc::strip_right,
+};
 
 fn main() {
     // 1. Print the welcome screen
@@ -92,7 +51,7 @@ fn main() {
         .expect("Error reading the name from terminal");
     strip_right(&mut password);
 
-    // create connection to the database now
+    // create connection to the database
     let conn: Connection =
         Connection::open("./database.db3").expect("Error connecting to the database");
     create_tables(&conn).expect("Error creating the tables");
@@ -118,9 +77,10 @@ fn main() {
         }
     }
 
-    // add a product to the inventory
-    match get_manager_id(&conn, "hamza") {
-        Ok(id) => println!("id: {}", id),
-        Err(e) => println!("error: {}", e),
-    }
+    // 3. add a product to the inventory
+    // let's do it
+    // add_product(&conn, name.as_str());
+
+    // 4. Remove a product from the inventory
+    remove_product(&conn, name.as_str());
 }

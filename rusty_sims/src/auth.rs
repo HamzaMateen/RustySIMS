@@ -60,7 +60,8 @@ pub fn create_manager(conn: &Connection, name: &str, password: &str) -> Result<(
 
     // extract the value now
     let exists = statement
-        .query_row(params![name], |row| row.get(0))
+        .query_row(params![name], |row| row.get::<_, i32>(0))
+        .map(|_| true)
         .unwrap_or(false);
 
     if exists {

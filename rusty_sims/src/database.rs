@@ -1,37 +1,4 @@
-use rusqlite::{params, Connection, Error, Result};
-
-pub fn create_product(
-    conn: &Connection,
-    name: &str,
-    description: &str,
-    price: f64,
-    stock: i32,
-    manager_id: i32,
-) -> Result<()> {
-    conn.execute(
-        "INSERT INTO products_inventory (name, description, price, stock, manager_id) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![
-            name,
-            description,
-            &price.to_string(),
-            &stock.to_string(),
-            &manager_id.to_string(),
-        ],
-    )
-    .expect("Error inserting the product to the table");
-
-    Ok(())
-}
-
-pub fn get_manager_id(conn: &Connection, name: &str) -> Result<i32> {
-    let mut stmnt = conn
-        .prepare("SELECT id FROM managers WHERE name = ?1")
-        .expect("Error creating query statement");
-
-    stmnt
-        .query_row(params![name], |row| Ok(row.get(0)))
-        .expect("Fetching id for manager failed")
-}
+use rusqlite::{Connection, Result};
 
 pub fn create_tables(conn: &Connection) -> Result<()> {
     conn.execute(
