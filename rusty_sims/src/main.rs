@@ -8,7 +8,7 @@ use std::io::{self, stdin, Write};
 
 use crate::{
     database::create_tables,
-    inventory::{add_product, remove_product},
+    inventory::{add_product, edit_product, remove_product},
     misc::strip_right,
 };
 
@@ -80,6 +80,11 @@ fn main() {
     // 3. add a product to the inventory
     // let's do it
     // add_product(&conn, name.as_str());
+
+    // 3.5 edit a product
+    // at this time, we have the manager's name
+    let product_name = "Love";
+    // edit_product(&conn, product_name, "hamza");
 
     // 4. Remove a product from the inventory
     remove_product(&conn, name.as_str());
