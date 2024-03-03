@@ -1,10 +1,22 @@
+use std::io;
+
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::{
+    layout::Alignment,
+    prelude::*,
+    symbols::border,
+    widgets::{block::*, *},
+};
+
+mod tui;
+
+// end using tui stuff
 mod auth;
 mod database;
 mod inventory;
 mod misc;
 
 use rusqlite::Connection;
-use std::io::{self, stdin, Write};
 
 use crate::{
     database::create_tables,
@@ -12,15 +24,112 @@ use crate::{
     misc::strip_right,
 };
 
-fn main() {
+#[derive(Debug, Default)]
+pub struct App {
+    counter: u8,
+    exit: bool,
+}
+
+impl App {
+    // runs the app main loop the user quits
+    pub fn run(&mut self, terminal: &mut tui::Tui) -> io::Result<()> {
+        while !self.exit {
+            terminal.draw(|frame| self.render_frame(frame))?;
+        }
+        Ok(())
+    }
+
+    fn render_frame(&self, frame: &mut Frame) {
+        frame.render_widget(self, frame.size());
+    }
+
+    fn handle_events(&mut self) -> io::Result<()> {
+        match event::read()? {
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event)
+            }
+            _ => {}
+        };
+        Ok(())
+    }
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.exit(),
+            KeyCode::Left => self.increment_counter(),
+            KeyCode::Right => self.decrement_counter(),
+            _ => {}
+        }
+    }
+
+    // business logic
+    fn exit(&mut self) {
+        self.exit = true;
+    }
+
+    fn decrement_counter(&mut self) {
+        self.counter += 1;
+    }
+
+    fn increment_counter(&mut self) {
+        self.counter -= 1;
+    }
+}
+
+impl Widget for &App {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let title = Title::from(" Welcome to RustySIMS ".bold());
+        let instructions = Title::from(Line::from(vec![
+            " Decrement ".into(),
+            "<Left>".blue().bold(),
+            " Increment ".into(),
+            "<Right>".blue().bold(),
+            " Quit ".bold(),
+            " Q ".blue().bold(),
+        ]));
+
+        let block = Block::default()
+            .title(title.alignment(Alignment::Center))
+            .title(
+                instructions
+                    .alignment(Alignment::Center)
+                    .position(Position::Bottom),
+            )
+            .borders(Borders::ALL)
+            .border_set(border::THICK);
+
+        let counter_text = Text::from(vec![Line::from(vec![
+            "Value: ".into(),
+            self.counter.to_string().yellow(),
+        ])]);
+
+        Paragraph::new(counter_text)
+            .centered()
+            .block(block)
+            .render(area, buf)
+    }
+}
+
+fn main() -> io::Result<()> {
+    let mut terminal = tui::init()?;
+
+    let mut myapp = App::default();
+    myapp.run(&mut terminal)?;
+
+    tui::restore()?;
+    Ok(())
+
+    /*
+
     // 1. Print the welcome screen
+    //
     let title = "Welcome to RustySIMS";
     let sub_title = "You one-stop Inventory Management Solution.";
 
     misc::print_welcome_msg(title, sub_title, 60);
 
+    Ok(())
     // 2. Authentication
-
     println!("\n\nDo you want to register or login to the platform?");
     println!("Enter 1 to register yourself");
     println!("Enter 2 to login to the platform");
@@ -88,4 +197,5 @@ fn main() {
 
     // 4. Remove a product from the inventory
     remove_product(&conn, name.as_str());
+    */
 }
