@@ -11,6 +11,7 @@ pub struct Product {
     manager_id: i32,
 }
 
+// Helper functions
 fn get_manager_id(conn: &Connection, name: &str) -> Result<i32> {
     let mut stmnt = conn
         .prepare("SELECT id FROM managers WHERE name = ?1")
@@ -21,7 +22,6 @@ fn get_manager_id(conn: &Connection, name: &str) -> Result<i32> {
         .expect("Fetching id for manager failed")
 }
 
-// Helper functions
 fn create_product(conn: &Connection, product: &mut Product, manager_name: &str) -> Result<()> {
     let manager_id = get_manager_id(conn, manager_name).unwrap_or_else(|e| {
         println!("Error getting manager ID: {}", e);
@@ -92,7 +92,7 @@ fn delete_product(conn: &Connection, product_name: &str, manager_name: &str) -> 
 }
 
 // public api
-pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) {
+pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) -> Result<i32> {
     let mut updated_product: Product = Product {
         name: String::new(),
         description: String::new(),
@@ -103,44 +103,36 @@ pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) {
 
     let manager_id = match get_manager_id(conn, manager_name) {
         Ok(id) => id,
-        Err(e) => {
-            println!("{}", e);
-            return ();
-        }
+        Err(e) => return Err(e),
     };
 
     // fetch the product from db
     let mut stmnt = match conn.prepare("SELECT name, description, price, stock, manager_id FROM products_inventory WHERE name = ?1 AND manager_id = ?2") {
         Ok(statement) => statement,
-        Err(e) => {
-            println!("Error preparing the product fetch statement, {}", e);
-            std::process::abort();
-        }
+        Err(e) => return Err(e),
     };
 
     // execute the statement
-    stmnt
-        .query_row(params![product_name, manager_id], |row| {
-            Ok({
-                updated_product.name = row.get(0)?;
-                updated_product.description = row.get(1)?;
-                updated_product.price = row.get(2)?;
-                updated_product.quantity = row.get(3)?;
-                updated_product.manager_id = row.get(4)?;
-            })
+    stmnt.query_row(params![product_name, manager_id], |row| {
+        Ok({
+            updated_product.name = row.get(0)?;
+            updated_product.description = row.get(1)?;
+            updated_product.price = row.get(2)?;
+            updated_product.quantity = row.get(3)?;
+            updated_product.manager_id = row.get(4)?;
         })
-        .expect("Error executing the product fetch statement");
+    })?;
 
     // let's update each and every value from here on
     // we still have the original product with us which we can use to update the values in db
 
     let mut input = String::new();
 
-    println!("Updating product details. Press <enter> to retain current value.");
+    println!("\nUpdating product details. Press <enter> to retain current value:");
 
     // update name
     print!(
-        "Enter product's new name? (current {}) |> ",
+        "\nEnter product's new name? (current: '{}') >>  ",
         updated_product.name
     );
     std::io::stdout()
@@ -159,12 +151,13 @@ pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) {
 
     // update description
     print!(
-        "Enter product's new description? (current {}) |> ",
+        "\nEnter product's new description? (current: {}') >>  ",
         updated_product.description
     );
     std::io::stdout()
         .flush()
         .expect("Couldn't flush output console");
+
     stdin()
         .read_line(&mut input)
         .expect("error reading input from the console");
@@ -176,7 +169,7 @@ pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) {
 
     // update price
     print!(
-        "Enter product's new price? (current {}) |> ",
+        "Enter product's new price? (current: '{}') >> ",
         updated_product.price
     );
     std::io::stdout()
@@ -192,7 +185,7 @@ pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) {
         updated_product.price = match input.parse() {
             Ok(new_price) => new_price,
             Err(_) => {
-                println!("Couldn't parse product's new price, retaining current price.");
+                println!("Couldn't parse product's new 'price', retaining current price.");
                 updated_product.price
             }
         }
@@ -200,7 +193,7 @@ pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) {
 
     // update stock value
     print!(
-        "Enter product's new quantity available in stock? (current {}) |> ",
+        "Enter product's new quantity available in stock? (current: '{}') |> ",
         updated_product.quantity
     );
     std::io::stdout()
@@ -217,7 +210,7 @@ pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) {
         updated_product.quantity = match input.parse() {
             Ok(new_quantity) => new_quantity,
             Err(_) => {
-                println!("Couldn't parse product's new price, retaining current price.");
+                println!("Couldn't parse product's new 'stock' value, retaining current quantity.");
                 updated_product.quantity
             }
         }
@@ -232,35 +225,37 @@ pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) {
                     "Update FAILURE: The product {} is not present in the inventory.",
                     product_name
                 );
+                Ok(rows_affected)
             } else {
                 println!(
-                    "Update SUCCESS: Product {}'s values have been updated.",
+                    "Update SUCCESS: Product {}'s details have been updated.",
                     product_name
                 );
+                Ok(rows_affected)
             }
         }
-        Err(e) => {
-            println!("Error updating the product's details: {}", e)
-        }
+        Err(e) => Err(e),
     }
 }
 
-pub fn remove_product(conn: &Connection, manager_name: &str) {
+pub fn remove_product(conn: &Connection, manager_name: &str) -> Result<bool> {
     let mut product_name: String = "".to_string();
 
-    print!("Which product do you want to remove from the inventory? |> ");
+    print!("\nWhich product do you want to remove from the inventory? >>  ");
     match std::io::stdout().flush() {
         Ok(()) => (),
-        Err(e) => println!("Error flushing out the console: {}", e),
-        // this error shouldn't stop the flow of execution since
-        // it doesn't affect the logic in any way
+        Err(e) => {
+            println!("Error flushing out the console: {}", e);
+            return Ok(false);
+        } // this error shouldn't stop the flow of execution since
+          // it doesn't affect the logic in any way
     }
 
     match stdin().read_line(&mut product_name) {
         Ok(_bytes_read) => (),
         Err(e) => {
             println!("couldn't read bytes from the console: {}", e);
-            std::process::abort()
+            return Ok(false);
         }
     }
     strip_right(&mut product_name);
@@ -273,18 +268,20 @@ pub fn remove_product(conn: &Connection, manager_name: &str) {
                     "The product {} is not present in the inventory",
                     product_name
                 );
+                return Ok(false);
             } else {
                 println!("The product {} has been taken off the shelf", product_name);
+                return Ok(true);
             }
         }
         Err(e) => {
             println!("Error removing the product from inventory: {}", e);
-            std::process::abort();
+            return Err(e);
         }
     };
 }
 
-pub fn add_product(conn: &Connection, manager_name: &str) {
+pub fn add_product(conn: &Connection, manager_name: &str) -> Result<bool> {
     let mut new_prod = Product {
         name: "".to_string(),
         description: "".to_string(),
@@ -293,19 +290,25 @@ pub fn add_product(conn: &Connection, manager_name: &str) {
         manager_id: 0,
     };
 
-    println!("Enter product's name: ");
+    print!("\nEnter product's name >>  ");
+    stdout().flush().expect("Error flushing out the console");
+
     stdin()
         .read_line(&mut new_prod.name)
         .expect("Error reading product's name!");
     strip_right(&mut new_prod.name);
 
-    println!("Provide a description: ");
+    print!("Provide a description >>  ");
+    stdout().flush().expect("Error flusing out the console");
+
     stdin()
         .read_line(&mut new_prod.description)
         .expect("Error reading product's description");
     strip_right(&mut new_prod.description);
 
-    println!("What should be the price: ");
+    print!("\nWhat should be the price >>  ");
+    stdout().flush().expect("Error flusing out the console");
+
     let mut price_string: String = "".to_string();
     stdin()
         .read_line(&mut price_string)
@@ -320,7 +323,9 @@ pub fn add_product(conn: &Connection, manager_name: &str) {
         }
     };
 
-    println!("How many of these are in stock: ");
+    print!("\nHow many of these are in stock >>  ");
+    stdout().flush().expect("Error flusing out the console");
+
     let mut quantity_string = "".to_string();
     stdin()
         .read_line(&mut quantity_string)
@@ -337,10 +342,10 @@ pub fn add_product(conn: &Connection, manager_name: &str) {
 
     // add the product now to the 'products_inventory' table
     match create_product(conn, &mut new_prod, manager_name) {
-        Ok(()) => println!("Success adding the product to the database."),
+        Ok(()) => Ok(true),
         Err(e) => {
-            println!("Failure adding the product to the database: {}", e);
-            std::process::abort();
+            println!("Error adding the product to the database: {}", e);
+            return Ok(false);
         }
     }
 }
