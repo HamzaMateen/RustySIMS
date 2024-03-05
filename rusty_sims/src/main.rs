@@ -8,7 +8,9 @@ use std::io::{self, stdin, Write};
 
 use crate::{
     auth::{authenticate_manager, register_manager},
-    inventory::{add_product, edit_product, remove_product},
+    inventory::{
+        add_product, edit_product, generate_inventory_report, get_manager_id, remove_product,
+    },
     misc::strip_right,
 };
 
@@ -46,27 +48,33 @@ impl Application {
         self.show_intro();
         self.show_login_screen();
 
+        // println!(
+        //     "manger_id: {}",
+        //     get_manager_id(&self.conn, &self.manager_name).expect("Sorry")
+        // );
         // by this time, we must have the inventory manager's name with us
         // yeah we have it...!
 
-        // Main Menu
+        // Main menu
         self.show_menu();
 
         let mut choice = "".to_string();
-        print!(">>  ");
-        io::stdout()
-            .flush()
-            .expect("Error flushing out the console.");
-
-        // select user's choice;
-        stdin()
-            .read_line(&mut choice)
-            .expect("Error reading 'choice' from the terminal");
-        strip_right(&mut choice);
-
-        // event loop
         let mut exit = false;
+
         while !exit {
+            // event loop
+
+            // select user's choice;
+            print!("\n>>  ");
+            io::stdout()
+                .flush()
+                .expect("Error flushing out the console.");
+
+            stdin()
+                .read_line(&mut choice)
+                .expect("Error reading 'choice' from the terminal");
+            strip_right(&mut choice);
+
             match self.str_to_menu_option(choice.as_str()) {
                 MenuOptions::AddProduct => {
                     match add_product(&self.conn, &self.manager_name) {
@@ -110,12 +118,23 @@ impl Application {
                         }
                     }
                 }
-                MenuOptions::ShowInventory => {}
+                MenuOptions::ShowInventory => {
+                    match generate_inventory_report(&self.conn, &self.manager_name) {
+                        Ok(()) => (),
+                        Err(e) => {
+                            println!("Couldn't generate inventory report, aborting!");
+                            println!("Reason: {}", e);
+                            exit = true;
+                        }
+                    }
+                }
                 MenuOptions::Quit => {
+                    println!("***** GOOD BYE *****");
                     exit = true;
                 }
                 MenuOptions::Invalid => println!("Invalid Choice, try again!"),
             }
+            choice.clear();
         }
     }
 
@@ -145,7 +164,7 @@ impl Application {
             "2" => MenuOptions::DeleteProduct,
             "3" => MenuOptions::EditProduct,
             "4" => MenuOptions::ShowInventory,
-            "5" => MenuOptions::Quit,
+            "q" => MenuOptions::Quit,
             _ => MenuOptions::Invalid,
         }
     }
@@ -236,7 +255,7 @@ impl Application {
 
 fn main() -> Result<(), rusqlite::Error> {
     let mut app = Application {
-        conn: Connection::open("../database.db3")?,
+        conn: Connection::open("database.db3")?,
         manager_name: "".to_string(),
     };
 

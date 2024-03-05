@@ -2,6 +2,10 @@ use crate::misc::strip_right;
 use rusqlite::{params, Connection, Result, Statement};
 use std::io::{stdin, stdout, Write};
 
+use comfy_table::modifiers::UTF8_ROUND_CORNERS;
+use comfy_table::presets::UTF8_FULL;
+use comfy_table::*;
+
 // #[derive(Debug)]
 pub struct Product {
     name: String,
@@ -12,7 +16,7 @@ pub struct Product {
 }
 
 // Helper functions
-fn get_manager_id(conn: &Connection, name: &str) -> Result<i32> {
+pub fn get_manager_id(conn: &Connection, name: &str) -> Result<i32> {
     let mut stmnt = conn
         .prepare("SELECT id FROM managers WHERE name = ?1")
         .expect("Error creating query statement");
@@ -92,6 +96,73 @@ fn delete_product(conn: &Connection, product_name: &str, manager_name: &str) -> 
 }
 
 // public api
+// report generation for inventory
+pub fn generate_inventory_report(conn: &Connection, manager_name: &str) -> Result<()> {
+    // no input from user whatsoever
+    // print current manager's details
+    let manager_id = get_manager_id(conn, manager_name)?;
+    let mut table1 = Table::new();
+
+    println!("Manager Details: ");
+    table1
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_width(80)
+        .set_header(vec![
+            Cell::new("ID")
+                .add_attribute(Attribute::Bold)
+                .set_alignment(CellAlignment::Center),
+            Cell::new("Name").fg(Color::Red),
+        ])
+        .add_row(vec![
+            Cell::new(manager_id.to_string()),
+            Cell::new(manager_name),
+        ]);
+    println!("{table1}");
+
+    println!("\nInventory Details: ");
+    let mut table2 = Table::new();
+    table2
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_width(80)
+        .set_header(vec![
+            Cell::new("ID").add_attribute(Attribute::Bold),
+            Cell::new("Name").fg(Color::Green),
+            Cell::new("Description"),
+            Cell::new("Price").fg(Color::Yellow),
+            Cell::new("Stock").fg(Color::Magenta),
+        ]);
+
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, price, stock FROM products_inventory WHERE manager_id = ?",
+    )?;
+    let inventory_iter = stmt.query_map([manager_id], |row| {
+        Ok((
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+        ))
+    })?;
+
+    for inventory in inventory_iter {
+        let (id, name, description, price, stock): (i32, String, String, f64, i32) = inventory?;
+        table2.add_row(vec![
+            Cell::new(id.to_string()),
+            Cell::new(name),
+            Cell::new(description),
+            Cell::new(format!("{:.2}", price)),
+            Cell::new(stock.to_string()),
+        ]);
+    }
+
+    println!("{table2}");
+    Ok(())
+}
+
+// ends here
 pub fn edit_product(conn: &Connection, product_name: &str, manager_name: &str) -> Result<i32> {
     let mut updated_product: Product = Product {
         name: String::new(),
@@ -306,7 +377,7 @@ pub fn add_product(conn: &Connection, manager_name: &str) -> Result<bool> {
         .expect("Error reading product's description");
     strip_right(&mut new_prod.description);
 
-    print!("\nWhat should be the price >>  ");
+    print!("What should be the price >>  ");
     stdout().flush().expect("Error flusing out the console");
 
     let mut price_string: String = "".to_string();
@@ -323,7 +394,7 @@ pub fn add_product(conn: &Connection, manager_name: &str) -> Result<bool> {
         }
     };
 
-    print!("\nHow many of these are in stock >>  ");
+    print!("How many of these are in stock >>  ");
     stdout().flush().expect("Error flusing out the console");
 
     let mut quantity_string = "".to_string();
