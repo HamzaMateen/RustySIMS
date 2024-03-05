@@ -16,7 +16,7 @@ pub struct Manager {
 
 impl Manager {
     #![allow(dead_code)]
-    pub fn show_manager_details(&self) {
+    fn show_manager_details(&self) {
         println!("******** Manager's Data ********\n");
 
         // let's use comfy-table to beautify this now
