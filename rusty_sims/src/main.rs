@@ -1,123 +1,126 @@
-use tui_textarea::TextArea;
+use std::io::{self, Write};
 
-// Ratatui from here
+use auth::{authenticate_manager, Manager};
+use database::create_tables;
+use rusqlite::Connection;
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
-use ratatui::{
-    prelude::*,
-    symbols::border,
-    widgets::{block::*, *},
-};
+use crate::{auth::register_manager, misc::strip_right};
 
-mod tui;
-use std::io;
+mod auth;
+mod database;
+mod inventory;
+mod misc;
 
-fn main() -> io::Result<()> {
-    let mut terminal = tui::init()?;
-
-    let app_result = App::default().run(&mut terminal);
-
-    tui::restore()?;
-
-    app_result
+struct Application {
+    conn: Connection,
+    // app must retain a manager's instance as well for the sake of the context
 }
 
-#[derive(Debug, Default)]
-pub struct App {
-    counter: u8,
-    exit: bool,
-}
-
-impl App {
-    /// runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut tui::Tui) -> io::Result<()> {
-        while !self.exit {
-            terminal.draw(|frame| self.render_frame(frame))?;
-            self.handle_events()?;
-        }
-        Ok(())
-    }
-
-    fn render_frame(&self, frame: &mut Frame) {
-        let rect = ratatui::layout::Rect {
-            x: 5,
-            y: 5,
-            width: 20,
-            height: 20,
-        };
-
-        let textarea = TextArea::default();
-        let textarea_widget = textarea.widget();
-
-        frame.render_widget(textarea_widget, rect);
-        frame.render_widget(self, frame.size());
-    }
-
-    /// updates the application's state based on user input
-    fn handle_events(&mut self) -> io::Result<()> {
-        match event::read()? {
-            // it's important to check that the event is a key press event as
-            // crossterm also emits key release and repeat events on Windows.
-            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
+impl Application {
+    fn run(&self) {
+        // 1. Initialize state: create tables
+        match create_tables(&self.conn) {
+            Ok(()) => (),
+            Err(e) => {
+                println!("{}", e);
+                return ();
             }
-            _ => {}
-        };
-        Ok(())
-    }
-
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Char('j') => self.decrement_counter(),
-            KeyCode::Char('k') => self.increment_counter(),
-            _ => {}
         }
+
+        self.show_intro();
+        self.show_login_screen();
     }
 
-    fn exit(&mut self) {
-        self.exit = true;
+    fn show_intro(&self) {
+        let title = "Welcome to RustySIMS";
+        let sub_title = "Your one-stop Solution for Inventory Management";
+
+        misc::print_welcome_msg(title, sub_title, 60);
     }
 
-    fn increment_counter(&mut self) {
-        self.counter += 1;
+    fn input_manager_details(&self) -> (String, String) {
+        let mut name = String::from("");
+        print!("\nEnter your name >>  ");
+        io::stdout()
+            .flush()
+            .expect("Error flushing out the console");
+        io::stdin()
+            .read_line(&mut name)
+            .expect("Error reading 'name' from console");
+        strip_right(&mut name);
+
+        let mut pass = String::from("");
+        print!("Enter your password >>  ");
+        io::stdout()
+            .flush()
+            .expect("Error flushing out the console");
+        io::stdin()
+            .read_line(&mut pass)
+            .expect("Error reading 'password' from console");
+        strip_right(&mut pass);
+
+        (name, pass)
     }
 
-    fn decrement_counter(&mut self) {
-        self.counter -= 1;
+    fn show_login_screen(&self) {
+        println!("\n\nPlease login or get registered before you can continue:");
+
+        println!("\nEnter '1' to register");
+        println!("Enter '2' to login");
+
+        let mut choice = String::from("");
+        loop {
+            print!("\n>>  ");
+            io::stdout()
+                .flush()
+                .expect("Error flushing out the console");
+
+            io::stdin()
+                .read_line(&mut choice)
+                .expect("Error reading 'name' from console");
+            strip_right(&mut choice);
+
+            match choice.as_str() {
+                "1" => {
+                    let (name, pass) = self.input_manager_details();
+
+                    match register_manager(&self.conn, name.as_str(), pass.as_str()) {
+                        Ok(()) => {
+                            println!("\nSUCCESS!\n");
+                            break;
+                        }
+                        Err(e) => println!("Couldn't add manager: {}", e),
+                    }
+                }
+                "2" => {
+                    let (name, pass) = self.input_manager_details();
+                    match authenticate_manager(&self.conn, name.as_str(), pass.as_str()) {
+                        Ok(()) => {
+                            println!("\nSUCCESS\n");
+                            break;
+                        }
+                        Err(e) => println!("\nAuth FAILURE: {}", e),
+                    }
+                }
+                _ => {
+                    println!("Invalid choice, try again!");
+                    choice.clear();
+                }
+            }
+        }
     }
 }
 
-// ANCHOR: impl Widget
-impl Widget for &App {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Title::from(" Counter App Tutorial ".bold());
-        let instructions = Title::from(Line::from(vec![
-            " Decrement ".into(),
-            "<Left>".blue().bold(),
-            " Increment ".into(),
-            "<Right>".blue().bold(),
-            " Quit ".into(),
-            "<Q> ".blue().bold(),
-        ]));
-        let block = Block::default()
-            .title(title.alignment(Alignment::Center))
-            .title(
-                instructions
-                    .alignment(Alignment::Center)
-                    .position(Position::Bottom),
-            )
-            .borders(Borders::ALL)
-            .border_set(border::THICK);
+fn main() -> Result<(), rusqlite::Error> {
+    let app = Application {
+        conn: Connection::open("../database.db3")?,
+    };
 
-        let counter_text = Text::from(vec![Line::from(vec![
-            "Value: ".into(),
-            self.counter.to_string().yellow(),
-        ])]);
+    app.run();
 
-        Paragraph::new(counter_text)
-            .centered()
-            .block(block)
-            .render(area, buf);
-    }
+    Ok(())
+    // application event loop
+    // loop {
+    // 1. Authentication
+    // }
 }
