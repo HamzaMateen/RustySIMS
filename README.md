@@ -2,7 +2,7 @@
 
 ![behold](./demo/project_rep_pic.jpeg)
 
-### Project Details**
+### Project Details
 RustySIMS is a command-line inventory management system designed to streamline product organization and tracking. It enables manager's with the following capabilities:
 
 - **Product Management:** Add, delete, edit, and view detailed information about products in your inventory, including name, description, price, stock level, and manager association with beautiful and simply elegant **Table-y** structures that are easy on eyes and highly understandable.
